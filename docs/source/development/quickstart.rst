@@ -5,9 +5,10 @@ Quick start
 ================================================================================
 
 This is a short introduction to the PROJ API. In the following section we
-create a simple program that transforms a geodetic coordinate to UTM and back
-again. The program is explained a few lines at a time. The complete program can
-be seen at the end of the section.
+create two simple programs that illustrate how to transform points between
+two different coordinate systems, and how to convert between projected and
+geodetic coordinates for a single coordinate system. Explanations for individual
+code sniplets and the full programs are provided.
 
 See the following sections for more in-depth descriptions of different parts of
 the PROJ API or consult the :doc:`API reference <reference/index>` for specifics.
@@ -47,10 +48,12 @@ Next we create the :c:type:`PJ` transformation object ``P`` with the function
 
 Here we have set up a transformation from geographic coordinates to UTM zone
 32N. In general, this is a transformation between two different coordinate reference systems
-(one of which is here in geographic coordinates).  The related function 
-:c:func:`proj_create` can be used to set up transformations that are not available through 
-the PROJ database, for instance for converting geodetic coordinates to a custom definition
-of a map projection.
+(one of which is here in geographic coordinates).
+
+The related function  :c:func:`proj_create` can be used to set up transformations 
+that are not available through the PROJ database, for instance for converting geodetic 
+coordinates to a custom definition of a map projection. An example of this is shown
+at the end of this document.
 
 :c:func:`proj_create_crs_to_crs` takes as its arguments:
 
@@ -201,4 +204,60 @@ A complete compilable version of the example code can be seen below:
   :language: c
   :linenos:
   :lines: 39-
+  
+An example illustrating :c:func:`proj_create`:
+  
+::
 
+    #include <proj.h>
+    #include <stdio.h>
+    #include <math.h>
+
+    int main (void) {
+      PJ_CONTEXT *C;
+      PJ *P;
+
+      /* Create the context. */
+      /* You may set C=PJ_DEFAULT_CTX if you are sure you will     */
+      /* use PJ objects from only one thread                       */
+      C = proj_context_create();
+
+      /* Create the projection. */
+      P = proj_create(C, "+proj=utm +zone=32 +datum=WGS84");
+
+      if (0 == P) {
+        fprintf(stderr, "Failed to create transformation object.\n");
+        return 1;
+      }
+
+      /* Longitude and latitude of Copenhagen, in degrees. */
+      double lon = 12.0, lat = 55.0;
+
+      /* Prepare the input */
+      PJ_COORD c_in;
+      c_in.lpzt.z = 0.0;
+      c_in.lpzt.t = HUGE_VAL; // important only for time-dependent projections
+      c_in.lp.lam = lon;
+      c_in.lp.phi = lat;
+      printf ("Input longitude: %g, latitude: %g (degrees)\n", c_in.lp.lam, c_in.lp.phi);
+
+      /* Convert from degrees to radians */
+      c_in.lp.lam = proj_torad(c_in.lp.lam);
+      c_in.lp.phi = proj_torad(c_in.lp.phi);
+    
+      /* Compute easting and northing */
+      PJ_COORD c_out = proj_trans(P, PJ_FWD, c_in);
+      printf ("Output easting: %g, northing: %g (meters)\n", c_out.enu.e, c_out.enu.n);
+
+      /* Apply the inverse transform */
+      PJ_COORD c_inv = proj_trans(P, PJ_INV, c_out);
+      c_inv.lp.lam = proj_todeg(c_inv.lp.lam);
+      c_inv.lp.phi = proj_todeg(c_inv.lp.phi);
+
+      printf ("Inverse applied: %g, latitude: %g (degrees)\n", c_inv.lp.lam, c_inv.lp.phi);      
+
+      /* Clean up */
+      proj_destroy(P);
+      proj_context_destroy(C); /* may be omitted in the single threaded case */
+      return 0;
+    }
